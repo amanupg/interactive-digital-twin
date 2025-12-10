@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+data/
+outputs/
+*.mp4
+*.ckpt
