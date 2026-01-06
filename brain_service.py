@@ -12,7 +12,6 @@ def main():
     image_path = sys.argv[1]
     prompt_text = sys.argv[2]
 
-    # Load Model (Cached)
     model = Qwen2VLForConditionalGeneration.from_pretrained(
         "Qwen/Qwen2-VL-7B-Instruct",
         torch_dtype=torch.bfloat16,
@@ -21,7 +20,6 @@ def main():
     )
     processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
 
-    # Process Input
     image = Image.open(image_path)
     messages = [
         {
@@ -52,7 +50,6 @@ def main():
         generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
     )[0]
 
-    # Print with delimiters for the controller to parse
     print(f"BRAIN_OUTPUT_START|{output_text}|BRAIN_OUTPUT_END")
 
 if __name__ == "__main__":
