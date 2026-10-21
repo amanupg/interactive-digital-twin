@@ -6,3 +6,6 @@ data/
 outputs/
 *.mp4
 *.ckpt
+.venv/
+target/
+*.pt
