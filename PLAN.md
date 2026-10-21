@@ -80,6 +80,53 @@ embeddings wait until there's CUDA access. If they turn out to matter, the plan 
 - Extract multi-scale SAM masks per training view and encode them with CLIP/SigLIP. Distill the features
   into compact per-Gaussian embeddings, following the LangSplat / feature-splatting family, with an autoencoder to keep memory small.
 - Query by text, take the relevancy map, then 3D clustering to get a part.
+
+**As built (no CUDA, so the lifting is training-free rather than a distilled feature rasterizer):**
+- `semantics/extract_features.py` runs SAM 2.1-B "everything" mode twice per view, once on the whole frame and once on a
+  **statue zoom crop**. The crop is the bronze figure and throne projected from the splat (radius-1.1 cylinder above the pedestal).
+  - Each mask gets an OpenCLIP ViT-B/16 (LAION-2B) embedding of its masked crop.
+  - Each pixel then gets two labels: the smallest covering mask (*part*) and the largest covering mask under 25% of the frame (*object*).
+  - The zoom pass is what separates the crown, book and scepter, which are too small at frame scale.
+- `semantics/lift.py` projects about 1.16M Gaussians (opacity > 0.1, within 25 units) into each of 300 views.
+  - A coarse z-buffer over the opaque Gaussians decides visibility.
+  - All 33k mask embeddings are quantized into a 12k-entry k-means codebook.
+  - Each visible Gaussian casts a vote for the code under it at both levels, weighted by 1/√(mask area).
+  - Each Gaussian keeps its **top 6 codes** (multi-label) instead of one averaged embedding.
+  - The field file is 35 MB.
+- `semantics/query.py` exposes `LanguageField.locate(text)`, which the Phase 3 agent will call.
+  - A Gaussian's score is its best code with at least 3 supporting observations, using LERF relevancy against generic negatives.
+  - It takes the top 0.2% of Gaussians and links them into connected components (radius 0.25).
+  - It returns the component with the **highest peak relevancy** (mean of its top 20 scores, at least 20 members),
+    as a centroid, an extent and the Gaussian ids.
+
+**What it took to make small parts work** (each step was diagnosed on the actual crown and book Gaussians):
+
+| Change | Why |
+|---|---|
+| Statue zoom pass in 2D | Frame-scale SAM never isolates the crown, book or scepter. |
+| Multi-label codes instead of averaging | Crown Gaussians are visible in a median of 180 views but isolated as "crown" in only a few. Averaging dropped them from 0.65 (2D) to 0.52. |
+| 12k codebook instead of 4k | The book is only weakly matched (0.55 in 2D), and 4k k-means merged it into a generic cluster scoring 0.51. An exact codebook breaks support counting, because each mask exists in only one view. |
+| Rank components by peak, with a minimum size | Total-mass ranking picked a big lamp post over the small scepter. Without a size floor, single noisy Gaussians won. |
+
+**Results** (`data/alma_v2/queries_full_{a,b}.jpg`, checked in views from all three rings, including from behind):
+
+| Query | Result |
+|---|---|
+| laurel crown | ✅ centroid on the crown from front, side and back |
+| scepter | ✅ centroid on the scepter head from all rings |
+| open book | ✅ centroid on the book in her lap |
+| stone inscription | ✅ the "ALMA MATER" granite block (SAM treats the whole block as one mask) |
+| bronze statue | ✅ figure and throne |
+| column | ✅ centroid on a Low Library column, with heat bleeding onto the steps and pedestal |
+| lamp | ❌ misses the green lamps flanking the statue |
+| owl | ❌ lands on her face; the hidden owl in the robe folds is never isolated by SAM |
+
+**Open issues:**
+- **No quantitative benchmark yet.** Results are checked visually. The next step is ground-truth 3D positions for each part:
+  click a part in 2 views, triangulate it, then report localization error and hit rate.
+- **Heat bleed:** the max-over-codes rule trades precision for recall, as the "column" query shows.
+- **Owl:** needs a targeted approach, for example a much tighter zoom on the robe or prompted SAM points.
+- **Cost on the M5:** 2D extraction takes about 21 s per view (1h45m for 300 views). Lifting takes about 3 min.
 - **Evaluation:** hand-label a small part set (owl hidden in the robe folds, scepter, open book, laurel crown,
   throne-arm lamps, "ALMA MATER" inscription) in about 20 held-out views and report mIoU and localization accuracy.
 
