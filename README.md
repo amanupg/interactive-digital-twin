@@ -2,6 +2,9 @@
 **Course:** COMS W 4995 - Deep Learning for Computer Vision (Columbia University)  
 **Author:** Aman Upganlawar
 
+> **v2 in progress.** The project is being rebuilt as a spatial agent over a semantic digital twin. See [PLAN.md](PLAN.md).
+> The rest of this README describes the original v1 (Dec 2025) system.
+
 ## Project Overview
 This project implements an autonomous, vision-based agent capable of inspecting a high-fidelity 3D digital twin of the Columbia University "Alma Mater" statue. The system integrates **3D Gaussian Splatting (3DGS)** for explicit scene reconstruction with a local **Vision-Language Model (Qwen2-VL)** for semantic reasoning.
 
