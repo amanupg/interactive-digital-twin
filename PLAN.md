@@ -145,6 +145,48 @@ embeddings wait until there's CUDA access. If they turn out to matter, the plan 
   "what is she holding in her right hand?", "what is written on the pedestal?"). Compare three setups:
   front view only, fixed multi-view, and the active agent. Report accuracy and the number of renders.
 
+**As built (all local on the M5):**
+- **Renderer** (`web/render.html`, `agent/render.py`): Spark 2.3.1 (three.js) runs in headless Chromium through Playwright.
+  - The splat stays in COLMAP coordinates. Cameras are set from OpenCV extrinsics, and the projection matrix comes
+    straight from the intrinsics.
+  - The 3M splats load in 1.2 s, and a frame takes about 0.2 s.
+  - Each render waits for Spark's worker sort to finish for *this* camera. A fixed frame count left stale sort order
+    after large camera jumps, which dropped one view to 14 PSNR.
+  - **Known gap:** on held-out views, Spark scores 24.4 PSNR and Brush scores 28.8 on the same PLY (they agree with each
+    other at 26.1). The error is concentrated in fine foliage, with slightly darker highlights. Spark's encoding and
+    kernel settings don't change this, so it's probably an anti-aliasing or opacity-model difference from what Brush trained with.
+    The statue and inscription render legibly, which is what the agent needs.
+- **Cameras** (`agent/cameras.py`): a gravity-aligned orbit frame.
+  - Azimuth 0 is her front, 90 her left side and 270 her right side, verified on renders.
+  - Camera height is **clamped to the capture band**, because the eye-level capture leaves views from above full of floaters.
+  - The agent backs the camera off until the target's 3D extent fits in frame. Without this, the clamp cropped the scepter's crown.
+- **VLM** (`agent/vlm.py`): Qwen3-VL 8B (Q4_K_M) served persistently by Ollama.
+  - It's a reasoning model, so Ollama's JSON/schema modes return empty replies. Actions are parsed from plain text instead.
+  - Output is capped at 2048 tokens, because one owl question reasoned until the 10-minute timeout.
+- **Agent** (`agent/agent.py`): it starts from a frontal overview, then takes up to 6 JSON actions:
+  `locate(query)` against the Phase 2 field, `look(target, side, height, distance)` to render a novel view, and `answer`.
+  Every step's camera pose and render is saved for replay in the web demo.
+- **Eval** (`agent/evaluate.py`, `agent/qa.json`): 15 questions graded by keyword match. It compares front-only (1 render),
+  four fixed views (4 renders at once) and the active agent.
+
+**First results** (`data/alma_v2/agent_eval/results.json`, Qwen3-VL 8B, temperature 0):
+
+| Setup | Correct | Renders per question |
+|---|---|---|
+| Front view only | 11 / 15 | 1 |
+| Four fixed views (front, left, back, right) | 12 / 15 | 4 |
+| **Active agent** | **12 / 15** | **1.27** (median 44 s per question) |
+
+- **Where the agent wins:** "what sits at the top of the scepter?" The agent located the scepter, chose a close,
+  high, front-right view and answered **crown**. Both fixed setups said "sphere", because the crown is too small in an overview.
+- **Where it loses:** the plaza question ("standing behind the statue…"). The agent answered from the frontal overview
+  without looking behind her. The four-view baseline got it because its back view happened to be included.
+- **All three setups fail** on the hidden owl (answers: mouse or dove) and on the green lamp (answers: urn).
+- **Honest read:** on this small set the agent ties four views while rendering about 3× less. Its main weakness is
+  **under-exploration**: the 8B model often answers from the overview even when the question names a viewpoint.
+  - Next steps: a policy rule or few-shot examples that force a look when the question names a side; a stronger planner VLM; more questions for statistical power.
+  - 15 questions is too few to separate the setups with confidence (a 1-question difference is noise).
+
 ## Phase 4: Web demo
 
 **Output:** a public link where anyone can orbit the statue and chat with the agent while watching its camera move.

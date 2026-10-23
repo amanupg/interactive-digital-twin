@@ -1,0 +1,17 @@
+[
+  {"id": "inscription", "q": "What words are carved into the stone pedestal below the statue?", "accept": ["alma mater"]},
+  {"id": "right_hand", "q": "What is the statue holding in her right hand?", "accept": ["scepter", "sceptre", "staff", "rod", "mace"]},
+  {"id": "lap", "q": "What object rests open on the statue's lap?", "accept": ["book"]},
+  {"id": "head", "q": "What does the statue wear on her head?", "accept": ["laurel", "wreath", "crown"]},
+  {"id": "pose", "q": "Is the figure standing or seated?", "accept": ["seated", "sitting", "sits"]},
+  {"id": "material", "q": "What material does the statue figure appear to be made of?", "accept": ["bronze", "metal", "copper", "iron"]},
+  {"id": "plinth_colour", "q": "What colour is the polished stone slab directly beneath the throne, above the light grey stone block?", "accept": ["red", "maroon", "purple", "burgundy", "brown", "pink", "crimson"]},
+  {"id": "behind_front", "q": "When you face the statue from the front, what architectural feature dominates the building behind her?", "accept": ["column", "colonnade", "pillar"]},
+  {"id": "plaza", "q": "Standing behind the statue and looking past her back, what kind of ground surface is in front of you?", "accept": ["brick", "pattern", "tile", "paved", "paving", "plaza"]},
+  {"id": "scepter_top", "q": "What decorative shape sits at the very top of the scepter she holds?", "accept": ["crown"]},
+  {"id": "left_hand", "q": "What is her left arm doing?", "accept": ["raised", "up", "outstretched", "extended", "lifted", "open"]},
+  {"id": "throne_sides", "q": "What tall decorative objects stand at the two front corners of her throne?", "accept": ["lamp", "torch", "finial", "urn", "flame", "lantern"]},
+  {"id": "owl", "q": "There is a small animal hidden in the folds of her robe. What animal is it?", "accept": ["owl"]},
+  {"id": "front_ground", "q": "What lies directly in front of the statue's pedestal, on the side she faces?", "accept": ["stair", "step"]},
+  {"id": "green_lamp", "q": "Beside the statue, on top of the stone wall, there is a green-tinted metal object. What is it?", "accept": ["lamp", "lantern", "light", "torch"]}
+]

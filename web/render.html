@@ -1,0 +1,98 @@
+<!doctype html>
+<!-- Headless render target for agent/render.py: loads a splat with Spark and renders
+     it from COLMAP (OpenCV) cameras. Exposes window.twin.{load, render}. -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>html, body { margin: 0; background: #000; overflow: hidden; }</style>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "./node_modules/three/build/three.module.js",
+      "three/addons/": "./node_modules/three/examples/jsm/",
+      "@sparkjsdev/spark": "./node_modules/@sparkjsdev/spark/dist/spark.module.js"
+    }
+  }
+</script>
+</head>
+<body>
+<script type="module">
+  import * as THREE from "three";
+  import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
+
+  const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1);
+  document.body.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  const spark = new SparkRenderer({ renderer, sortRadial: false, minSortIntervalMs: 0 });
+  scene.add(spark);
+  const camera = new THREE.PerspectiveCamera();
+  camera.matrixAutoUpdate = false;
+  let mesh = null;
+
+  const nextFrame = () => new Promise((r) => requestAnimationFrame(r));
+
+  // Splat stays in COLMAP world coordinates; only the camera is converted.
+  // opts go straight to SplatMesh, e.g. {extSplats: true} for higher-precision colour/SH.
+  async function load(url, opts = {}) {
+    if (mesh) scene.remove(mesh);
+    mesh = new SplatMesh({ url, lod: false, ...opts });
+    await mesh.initialized;
+    mesh.maxSh = 3;
+    scene.add(mesh);
+    return mesh.packedSplats?.numSplats ?? mesh.splats?.getNumSplats?.() ?? null;
+  }
+
+  // cam: {R: 9 row-major world->camera, t: 3, fx, fy, cx, cy, width, height, near, far}
+  async function render(cam, settleFrames = 2) {
+    const { width: W, height: H, fx, fy, cx, cy } = cam;
+    const near = cam.near ?? 0.01, far = cam.far ?? 500;
+    renderer.setSize(W, H, false);
+
+    // OpenCV c2w = [R^T | -R^T t]; three.js cameras look down -z with +y up -> flip y, z axes.
+    const R = cam.R, t = cam.t;
+    const Rt = [R[0], R[3], R[6], R[1], R[4], R[7], R[2], R[5], R[8]];  // R^T row-major
+    const C = [0, 1, 2].map((i) => -(Rt[3 * i] * t[0] + Rt[3 * i + 1] * t[1] + Rt[3 * i + 2] * t[2]));
+    camera.matrix.set(
+      Rt[0], -Rt[1], -Rt[2], C[0],
+      Rt[3], -Rt[4], -Rt[5], C[1],
+      Rt[6], -Rt[7], -Rt[8], C[2],
+      0, 0, 0, 1);
+    camera.updateMatrixWorld(true);
+
+    // Projection straight from intrinsics (principal point need not be centred).
+    camera.projectionMatrix.set(
+      2 * fx / W, 0, 1 - 2 * cx / W, 0,
+      0, 2 * fy / H, 2 * cy / H - 1, 0,
+      0, 0, -(far + near) / (far - near), -2 * far * near / (far - near),
+      0, 0, -1, 0);
+    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+
+    // Spark sorts splats asynchronously in a worker. A fixed number of frames is not
+    // enough after a large camera jump (stale order -> wrong blending), so wait until
+    // the sort has been done for *this* camera position and nothing is pending.
+    const pos = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
+    await spark.update({ scene, camera });
+    for (let i = 0; i < 600; i++) {
+      renderer.render(scene, camera);
+      await nextFrame();
+      const settled = !spark.sorting && !spark.sortDirty && spark.sortedCenter.distanceTo(pos) < 1e-6;
+      if (settled && --settleFrames <= 0) break;
+    }
+    renderer.render(scene, camera);
+    return renderer.domElement.toDataURL("image/png");
+  }
+
+  // Renderer knobs, e.g. {maxStdDev: 3, minAlpha: 1/255, outputColorSpace: "srgb-linear"}.
+  function configure(opts) {
+    for (const [k, v] of Object.entries(opts)) {
+      if (k === "outputColorSpace") renderer.outputColorSpace = v;
+      else if (k === "maxSh" && mesh) mesh.maxSh = v;
+      else spark[k] = v;
+    }
+  }
+
+  window.twin = { load, render, configure, ready: true };
+</script>
+</body>
+</html>
